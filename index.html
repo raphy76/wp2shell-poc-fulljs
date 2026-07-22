@@ -62,36 +62,80 @@ button {
 
 <div class="container">
 
-<h1>REST Route Confusion Lab</h1>
+<h1>WORDPRESS REST Route Confusion Lab - CVE-2026-63030</h1>
 
 <p>
-Simulation du chemin :
+You are a security researcher analyzing a WordPress REST API vulnerability.
+Your goal is to trigger:
 </p>
 
 <div class="code">
-Request → Validation → Controller → Query Builder
+alert("success")
 </div>
+
+<p>
+This lab reproduces the logical flow of the real-world vulnerability in a simplified
+JavaScript environment. Since WordPress is open source, attackers can study the source
+code directly (for example through the GitHub repository or browser developer tools)
+to understand how the request processing pipeline works.
+</p>
+
+<p>
+Your objective is to understand the sequence of events that leads from a single HTTP
+request to the execution of <code>alert("success")</code>.
+</p>
+
+<div class="code">
+HTTP Request
+      ↓
+Schema Validation
+      ↓
+Route Resolution
+      ↓
+Controller Execution
+      ↓
+Query Builder
+</div>
+
+<p>
+Enter the JSON HTTP request you want to test below.
+The simulator reproduces an analogous logical flow to the real WordPress scenario,
+with some simplifications for educational purposes.
+</p>
 
 <form id="labForm">
 
-<label>
-Paramètre simulé :
+<label for="requestInput">
+Simulated HTTP Request:
 </label>
 
-<input 
-    id="authorExclude"
-    name="author_exclude"
-    placeholder="ex: valeur de test"
->
+<textarea
+    id="requestInput"
+    name="request"
+    rows="12"
+    style="
+        width:100%;
+        padding:10px;
+        margin:10px 0;
+        font-family:monospace;
+        resize:vertical;
+    "
+    placeholder='{
+  "method": "POST",
+  "url": "Batch",
+  "body": {
+    "batch_requests": []
+  }
+}'></textarea>
 
 <button type="submit">
-Tester
+Send Request
 </button>
 
 </form>
 
 
-<h2>Pipeline</h2>
+<h2>Execution Pipeline</h2>
 
 <div id="result"></div>
 
@@ -100,93 +144,17 @@ Tester
 
 
 <script>
+document.getElementById("labForm").addEventListener("submit", function(event) {
+    event.preventDefault();
 
-document
-.getElementById("labForm")
-.addEventListener("submit", function(e){
+    const request = document.getElementById("requestInput").value;
 
-    e.preventDefault();
-
-    const value =
-        document.getElementById("authorExclude").value;
-
-    const result =
-        document.getElementById("result");
-
-
-    result.innerHTML = "";
-
-
-    let steps = [
-
-        {
-            name: "Paramètre reçu dans Request",
-            ok: value.length > 0
-        },
-
-        {
-            name: "Validation avec schéma simulé",
-            ok: true
-        },
-
-        {
-            name: "Contrôleur Posts atteint",
-            ok: true
-        },
-
-        {
-            name: "Mapping author_exclude → author__not_in",
-            ok: true
-        },
-
-        {
-            name: "Passage au FakeQuery (aucun SQL exécuté)",
-            ok: true
-        }
-
-    ];
-
-
-    steps.forEach(step => {
-
-        let div = document.createElement("div");
-
-        div.className =
-            "step " + (step.ok ? "ok" : "fail");
-
-        div.innerHTML =
-            (step.ok ? "✓ " : "✗ ")
-            + step.name;
-
-        result.appendChild(div);
-
-    });
-
-
-    let debug =
-        document.createElement("div");
-
-    debug.className = "code";
-
-    debug.innerHTML =
-`Request:
-{
-  "author_exclude": "${value}"
-}
-
-Simulation:
-author_exclude
-        ↓
-author__not_in
-        ↓
-FakeQuery`;
-
-    result.appendChild(debug);
-
+    onClickTestInjection(request);
 });
 
 let injectionSuccess = false;
 function onClickTestInjection(requestStr){
+
     try {
         let request = JSON.parse(requestStr)
         launch_request(request)
@@ -245,14 +213,6 @@ function processBatchRequest(request){
             continue;            
         }
         
-        //subRequest.baseUrl = match.baseUrl // baseUrl is conserved correctly unlike url
-        //subRequest.url = match.url // bad url because of confusion indice
-        //subRequest.param = match.param // bad param because of confusion indice
-        //subRequest.body = match.body
-
-        //let result = processRequest(subRequest)
-        
-        //sanitizeParams(subRequest)
         let result = getRoute(subRequest.url)(subRequest, match.handler)
         results.push(result)
     }
@@ -419,6 +379,7 @@ function launch_request(request){
     
 }
 
+/*
 // Fail
 onClickTestInjection(JSON.stringify(
     {
@@ -530,7 +491,7 @@ onClickTestInjection(JSON.stringify(
             ]
         }
     }
-))
+))*/
 
 console.log("toto")
 </script>
