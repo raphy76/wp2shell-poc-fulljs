@@ -66,36 +66,14 @@ button {
 
 <p>
 You are a security researcher analyzing a WordPress REST API vulnerability.
-Your goal is to trigger:
+Your goal is to find the vicious request allowing to trigger:
 </p>
 
 <div class="code">
-alert("success")
+alert("Congratulations! SQL injection succeeded!!!");
 </div>
 
-<p>
-This lab reproduces the logical flow of the real-world vulnerability in a simplified
-JavaScript environment. Since WordPress is open source, attackers can study the source
-code directly (for example through the GitHub repository or browser developer tools)
-to understand how the request processing pipeline works.
-</p>
-
-<p>
-Your objective is to understand the sequence of events that leads from a single HTTP
-request to the execution of <code>alert("success")</code>.
-</p>
-
-<div class="code">
-HTTP Request
-      ↓
-Schema Validation
-      ↓
-Route Resolution
-      ↓
-Controller Execution
-      ↓
-Query Builder
-</div>
+<br/>
 
 <p>
 Enter the JSON HTTP request you want to test below.
@@ -134,13 +112,49 @@ Send Request
 
 </form>
 
+<br/>
 
+<h1>More explanation</h1>
+
+<p>
+In a real WordPress vulnerability research scenario, security researchers and attackers can
+analyze the publicly available source code to understand the internal request flow.
+This lab follows the same approach: the source code is intentionally available to you.
+</p>
+
+<p>
+To complete the challenge, inspect the JavaScript code through your browser developer tools
+or the repository and trace how a request is processed from input to execution.
+</p>
+
+<p>
+Your objective is to understand the sequence of events that leads from a single HTTP
+request to the execution of <code>alert("Congratulations! SQL injection succeeded!!!");
+</code>.
+</p>
+
+<div class="code">
+HTTP Request
+      ↓
+Schema Validation
+      ↓
+Route Resolution
+      ↓
+Controller Execution
+      ↓
+Query Builder
+</div>
+
+
+
+<!--
 <h2>Execution Pipeline</h2>
 
 <div id="result"></div>
 
 
 </div>
+-->
 
 
 <script>
@@ -164,7 +178,7 @@ function onClickTestInjection(requestStr){
 
     // Check if success
     if(injectionSuccess){
-        alert("success!!")
+        alert("Congratulations! SQL injection succeeded!!!");
     } else {
         alert("fail!")
     }
@@ -248,12 +262,7 @@ function sanitizeParams(request){
     request.param = newParam.param
 }
 
-function processRequest(request){
-  if(request.baseUrl === "Batch") return processBatchRequest(request)
-  else if(request.baseUrl === "Posts") processPostsRequest(request)
-  else if(request.baseUrl === "Users") processUsersRequest(request)
-  else console.error("processRequest : Unknown baseUrl:", request.baseUrl)
-}
+
 function processUsersRequest(){
     // nothing useful
 }
@@ -262,7 +271,7 @@ function getHandler(url){
   else if(url === "Posts") return processPostsRequest
   else if(url === "Users") return processUsersRequest
 
-  console.error("processRequest : Unknown baseUrl:", request.baseUrl); 
+  console.error("getHandler : Unknown url:", request.url); 
   return null  
 }
 function getRoute(url){
@@ -270,7 +279,7 @@ function getRoute(url){
   else if(url === "Posts") return routePosts
   else if(url === "Users") return routeUsers
 
-  console.error("processRequest : Unknown baseUrl:", request.baseUrl); 
+  console.error("getRoute : Unknown url:", request.url); 
   return null  
 }
 function processPostsRequest(request){
@@ -385,7 +394,6 @@ onClickTestInjection(JSON.stringify(
     {
         method:"GET",
         url:"Posts", 
-        baseUrl:"Posts",
         param: 
         {
             author_exclude:"OR (1)"
@@ -398,11 +406,10 @@ onClickTestInjection(JSON.stringify(
     {
         method:"POST",
         url:"Batch", 
-        baseUrl:"Batch",
         body: {
             batch_requests:[
-                {method:"POST",url:"any",baseUrl:"any", param:{author_exclude:"OR (1)"}},
-                {method:"GET",url:"Posts",baseUrl:"Posts",param:{}}
+                {method:"POST",url:"any", param:{author_exclude:"OR (1)"}},
+                {method:"GET",url:"Posts",param:{}}
             ]
         }
     }
@@ -413,19 +420,16 @@ onClickTestInjection(JSON.stringify(
 onClickTestInjection(JSON.stringify({
   "method": "POST",
   "url": "Batch",
-  "baseUrl": "Batch",
   "body": {
     "batch_requests": [
       {
         "method": "POST",
         "url": "Batch",
-        "baseUrl":"Batch",
         "body": {
           "batch_requests": [
             {
               "method": "GET",
               "url": "Posts",
-              "baseUrl": "Posts",
               "param": {
                 "author_exclude": "OR (1)"
               }
@@ -471,10 +475,9 @@ onClickTestInjection(JSON.stringify({
 
 // Sucess
 let innerBatchRequests = [
-    {method:"POST",url:"any",baseUrl:"any",param:{}},
-    {method:"GET",url:"Users",baseUrl:"Users",param:{author_exclude:"OR (1)"}},
-    {method:"GET",url:"Posts",baseUrl:"Posts", body:{}},
-    //{method:"POST",url:"Users", baseUrl:"Users", param:{}},  //last because of index   
+    {method:"POST",url:"any",param:{}},
+    {method:"GET",url:"Users",param:{author_exclude:"OR (1)"}},
+    {method:"GET",url:"Posts", body:{}},
 
 ]
 onClickTestInjection(JSON.stringify(
@@ -484,10 +487,10 @@ onClickTestInjection(JSON.stringify(
         baseUrl:"Batch",
         body: {
             batch_requests:[
-                {method:"POST",url:"any", baseUrl:"any", param:{}},
-                {method:"POST",url:"Posts", baseUrl:"Posts", body:{batch_requests: innerBatchRequests}},
-                {method:"POST",url:"Batch", baseUrl:"Batch", body:{batch_requests: []}},    
-                //{method:"POST",url:"Users", baseUrl:"Users", param:{}},  //last because of index             
+                {method:"POST",url:"any", param:{}},
+                {method:"POST",url:"Posts", body:{batch_requests: innerBatchRequests}},
+                {method:"POST",url:"Batch", body:{batch_requests: []}},    
+            
             ]
         }
     }
