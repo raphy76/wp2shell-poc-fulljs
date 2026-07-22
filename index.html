@@ -158,42 +158,12 @@ Query Builder
 
 
 <script>
-document.getElementById("labForm").addEventListener("submit", function(event) {
-    event.preventDefault();
 
-    const request = document.getElementById("requestInput").value;
 
-    onClickTestInjection(request);
-});
 
-let injectionSuccess = false;
-function onClickTestInjection(requestStr){
+//// BUISNESS LOGIC ////
 
-    try {
-        let request = JSON.parse(requestStr)
-        launch_request(request)
-    } catch(e){
-      console.error(e)
-    }
-
-    // Check if success
-    if(injectionSuccess){
-        alert("Congratulations! SQL injection succeeded!!!");
-    } else {
-        alert("fail!")
-    }
-
-    // Reinit for next try
-    injectionSuccess = false
-
-}
-function isValidUrl(url){
-    return (
-        url === "Posts" || 
-        url === "Users" || 
-        url === "Batch"
-    )
-}
+// Batch
 function processBatchRequest(request){
     let batch_requests = request.body.batch_requests
 
@@ -234,54 +204,15 @@ function processBatchRequest(request){
     return results
 }
 
-function sanitizeArrayAuthor(author_exclude){
-    let sanitizedArray = [];
-    for(let id of author_exclude){
-        sanitizedArray.push(Number(id))
-    }
-    return sanitizedArray;
-}
-function sanitizeParams(request){
-    // map and sanitize
-    let newParam = {param:{}};
-
-    //for(let key of allowparams){
-        if(request?.param?.author_exclude){
-            let author_exclude = structuredClone(request.param.author_exclude);
-            
-            if(Array.isArray(author_exclude)){
-                author_exclude = sanitizeArrayAuthor(author_exclude)
-            }
-            let author__not_in = author_exclude
-
-            // map author_exclude -> author__not_in
-            newParam.param.author__not_in = author__not_in;
-        }        
-    //}
-
-    request.param = newParam.param
+function isValidUrl(url){
+    return (
+        url === "Posts" || 
+        url === "Users" || 
+        url === "Batch"
+    )
 }
 
-
-function processUsersRequest(){
-    // nothing useful
-}
-function getHandler(url){
-  if(url === "Batch") return processBatchRequest
-  else if(url === "Posts") return processPostsRequest
-  else if(url === "Users") return processUsersRequest
-
-  console.error("getHandler : Unknown url:", request.url); 
-  return null  
-}
-function getRoute(url){
-  if(url === "Batch") return routeBatch
-  else if(url === "Posts") return routePosts
-  else if(url === "Users") return routeUsers
-
-  console.error("getRoute : Unknown url:", request.url); 
-  return null  
-}
+// Posts
 function processPostsRequest(request){
     if(request.method !== "GET") {
         console.error("processPostsRequest method must be GET")
@@ -296,66 +227,73 @@ function processPostsRequest(request){
         injectionSuccess = true
     }
 }
-function isValidBatchRequest(request) {
 
-    for (const subrequest of request.body.batch_requests) {
-
-        if (subrequest.method === "GET") {
-            return false;
-        }
-
-    }
-
-    return true;
+// Users
+function processUsersRequest(){
+    // nothing useful
 }
-function isValidPostsRequest(request) {
 
-    const value = request.param?.author_exclude;
-
-
-    // Le paramètre doit exister
-    if (value === undefined) {
-        return true;
+// Common
+function sanitizeArrayAuthor(author_exclude){
+    let sanitizedArray = [];
+    for(let id of author_exclude){
+        sanitizedArray.push(Number(id))
     }
-
-
-    // Doit être un tableau
-    if (!Array.isArray(value)) {
-        return false;
-    }
-
-
-    // Chaque élément doit être un entier
-    for (const item of value) {
-
-        if (!Number.isInteger(item)) {
-            return false;
-        }
-
-    }
-
-
-    return true;
+    return sanitizedArray;
 }
-function isValidUserRequest(request){
-    return true; // nothign to check for users
+
+function sanitizeParams(request){
+    // map and sanitize
+    let newParam = {param:{}};
+
+    //for(let key of allowparams){ 
+        // in real scenario, several keys are checked here, not just author_exclude
+
+        if(request?.param?.author_exclude){
+            let author_exclude = structuredClone(request.param.author_exclude);
+            
+            if(Array.isArray(author_exclude)){
+                author_exclude = sanitizeArrayAuthor(author_exclude)
+            }
+            let author__not_in = author_exclude
+
+            // map author_exclude -> author__not_in
+            newParam.param.author__not_in = author__not_in;
+        }   
+
+    //}
+
+    request.param = newParam.param
 }
+
+function getHandler(url){
+  if(url === "Batch") return processBatchRequest
+  else if(url === "Posts") return processPostsRequest
+  else if(url === "Users") return processUsersRequest
+
+  console.error("getHandler : Unknown url:", request.url); 
+  return null  
+}
+////////
+
+//// ROUTE ////
 function routeBatch(request, handler){
     console.log("routeBatch",request.url)
 
-        if(!isValidBatchRequest(request)) {
-            console.error("error: invalid batch request, subrequest cannot use method GET")
-            return "error"
-        }
+    if(!isValidSchemaBatchRequest(request)) {
+        console.error("routeBatch - error: invalid batch request, subrequest cannot use method GET")
+        return "error"
+    }
 
-        let results = handler(request)
-        return "ok"
+    let results = handler(request)
+    return "ok"
 }
+
 function routePosts(request, handler){
      console.log("routePosts",request.url)
 
-     if(!isValidPostsRequest(request)) {
-        console.error("error: invalid post request, param author_exclude is not array of integer")
+     if(!isValidSchemaPostsRequest(request)) {
+        console.error("routePosts - error: invalid post request, param author_exclude is not array of integer")
         return "error"
     }
 
@@ -366,14 +304,65 @@ function routePosts(request, handler){
 function routeUsers(request, handler){
     console.log("routeUsers",request.url)
 
-    if(!isValidUserRequest(request)) return "error"
+    if(!isValidSchemaUsersRequest(request)) return "error"
 
     sanitizeParams(request);
     handler(request)
     return "ok"
 }
 
-function launch_request(request){
+function getRoute(url){
+  if(url === "Batch") return routeBatch
+  else if(url === "Posts") return routePosts
+  else if(url === "Users") return routeUsers
+
+  console.error("getRoute - error: unknown url:", request.url); 
+  return null  
+}
+////////
+
+//// ROUTE VALIDATORS ////
+function isValidSchemaBatchRequest(request) {
+    for (const subrequest of request.body.batch_requests) {
+        if (subrequest.method === "GET") {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function isValidSchemaPostsRequest(request) {
+
+    const value = request.param?.author_exclude;
+
+
+    if (value === undefined) {
+        return true;
+    }
+
+    if (!Array.isArray(value)) {
+        return false;
+    }
+
+    for (const item of value) {
+        if (!Number.isInteger(item)) {
+            return false;
+        }
+    }
+
+
+    return true;
+}
+
+function isValidSchemaUsersRequest(request){
+    return true; // nothing to check for users
+}
+////////
+
+//// ENTREY POINT ////
+// Simulate a server reacting to the client request
+function route(request){
     if(request.method === "POST" && request.url === "Batch"){
         return routeBatch(request, processBatchRequest)
     }
@@ -386,6 +375,38 @@ function launch_request(request){
         return routeUsers(request, processUsersRequest)
     }
     
+}
+////////
+
+document.getElementById("labForm").addEventListener("submit", function(event) {
+    event.preventDefault();
+
+    const request = document.getElementById("requestInput").value;
+
+    onClickTestInjection(request);
+});
+
+let injectionSuccess = false;
+function onClickTestInjection(requestStr){
+
+    try {
+        let request = JSON.parse(requestStr)
+        route(request)
+    } catch(e){
+      console.error(e)
+    }
+
+    if(injectionSuccess){
+        console.log("Congratulations! SQL injection succeeded!!!")
+        alert("Congratulations! SQL injection succeeded!!!");
+    } else {
+        console.log("fail!")
+        alert("fail!")
+    }
+
+    // Reinit for next try
+    injectionSuccess = false
+
 }
 
 /*
