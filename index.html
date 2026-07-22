@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>REST Pipeline Lab</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f4f4;
+    margin: 40px;
+}
+
+.container {
+    max-width: 800px;
+    margin: auto;
+    background: white;
+    padding: 25px;
+    border-radius: 8px;
+}
+
+input {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    font-family: monospace;
+}
+
+button {
+    padding: 10px 20px;
+    cursor: pointer;
+}
+
+.step {
+    padding: 10px;
+    margin: 8px 0;
+    border-radius: 5px;
+    background: #eee;
+}
+
+.ok {
+    background: #d4edda;
+    color: #155724;
+}
+
+.fail {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.code {
+    background: #222;
+    color: #ddd;
+    padding: 15px;
+    font-family: monospace;
+    border-radius: 5px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>REST Route Confusion Lab</h1>
+
+<p>
+Simulation du chemin :
+</p>
+
+<div class="code">
+Request → Validation → Controller → Query Builder
+</div>
+
+<form id="labForm">
+
+<label>
+Paramètre simulé :
+</label>
+
+<input 
+    id="authorExclude"
+    name="author_exclude"
+    placeholder="ex: valeur de test"
+>
+
+<button type="submit">
+Tester
+</button>
+
+</form>
+
+
+<h2>Pipeline</h2>
+
+<div id="result"></div>
+
+
+</div>
+
+
+<script>
+
+document
+.getElementById("labForm")
+.addEventListener("submit", function(e){
+
+    e.preventDefault();
+
+    const value =
+        document.getElementById("authorExclude").value;
+
+    const result =
+        document.getElementById("result");
+
+
+    result.innerHTML = "";
+
+
+    let steps = [
+
+        {
+            name: "Paramètre reçu dans Request",
+            ok: value.length > 0
+        },
+
+        {
+            name: "Validation avec schéma simulé",
+            ok: true
+        },
+
+        {
+            name: "Contrôleur Posts atteint",
+            ok: true
+        },
+
+        {
+            name: "Mapping author_exclude → author__not_in",
+            ok: true
+        },
+
+        {
+            name: "Passage au FakeQuery (aucun SQL exécuté)",
+            ok: true
+        }
+
+    ];
+
+
+    steps.forEach(step => {
+
+        let div = document.createElement("div");
+
+        div.className =
+            "step " + (step.ok ? "ok" : "fail");
+
+        div.innerHTML =
+            (step.ok ? "✓ " : "✗ ")
+            + step.name;
+
+        result.appendChild(div);
+
+    });
+
+
+    let debug =
+        document.createElement("div");
+
+    debug.className = "code";
+
+    debug.innerHTML =
+`Request:
+{
+  "author_exclude": "${value}"
+}
+
+Simulation:
+author_exclude
+        ↓
+author__not_in
+        ↓
+FakeQuery`;
+
+    result.appendChild(debug);
+
+});
+
+let injectionSuccess = false;
+function onClickTestInjection(requestStr){
+    try {
+        let request = JSON.parse(requestStr)
+        launch_request(request)
+    } catch(e){
+      console.error(e)
+    }
+
+    // Check if success
+    if(injectionSuccess){
+        alert("success!!")
+    } else {
+        alert("fail!")
+    }
+
+    // Reinit for next try
+    injectionSuccess = false
+
+}
+function isValidUrl(url){
+    return (
+        url === "Posts" || 
+        url === "Users" || 
+        url === "Batch"
+    )
+}
+function processBatchRequest(request){
+    let batch_requests = request.body.batch_requests
+
+    let matches = []
+    let validations = []
+
+    for(let subrequest of batch_requests){            
+        if(!isValidUrl(subrequest.url)){
+          console.error("processBatchRequest - invalid url : ", subrequest.url)
+          validations.push("error")
+          continue;
+        }
+
+        matches.push({handler:getHandler(subrequest.url)});
+        validations.push("ok")
+    }
+
+    let results = []
+    for(let indSubRequest = 0; indSubRequest < batch_requests.length; indSubRequest++){
+
+        if(validations[indSubRequest] === "error") {
+            results.push("error")
+            continue;
+        }
+
+        let subRequest = structuredClone(batch_requests[indSubRequest]);
+        let match  = matches[indSubRequest]
+
+        if(!match) {
+            results.push("error")
+            continue;            
+        }
+        
+        //subRequest.baseUrl = match.baseUrl // baseUrl is conserved correctly unlike url
+        //subRequest.url = match.url // bad url because of confusion indice
+        //subRequest.param = match.param // bad param because of confusion indice
+        //subRequest.body = match.body
+
+        //let result = processRequest(subRequest)
+        
+        //sanitizeParams(subRequest)
+        let result = getRoute(subRequest.url)(subRequest, match.handler)
+        results.push(result)
+    }
+
+    return results
+}
+
+function sanitizeArrayAuthor(author_exclude){
+    let sanitizedArray = [];
+    for(let id of author_exclude){
+        sanitizedArray.push(Number(id))
+    }
+    return sanitizedArray;
+}
+function sanitizeParams(request){
+    // map and sanitize
+    let newParam = {param:{}};
+
+    //for(let key of allowparams){
+        if(request?.param?.author_exclude){
+            let author_exclude = structuredClone(request.param.author_exclude);
+            
+            if(Array.isArray(author_exclude)){
+                author_exclude = sanitizeArrayAuthor(author_exclude)
+            }
+            let author__not_in = author_exclude
+
+            // map author_exclude -> author__not_in
+            newParam.param.author__not_in = author__not_in;
+        }        
+    //}
+
+    request.param = newParam.param
+}
+
+function processRequest(request){
+  if(request.baseUrl === "Batch") return processBatchRequest(request)
+  else if(request.baseUrl === "Posts") processPostsRequest(request)
+  else if(request.baseUrl === "Users") processUsersRequest(request)
+  else console.error("processRequest : Unknown baseUrl:", request.baseUrl)
+}
+function processUsersRequest(){
+    // nothing useful
+}
+function getHandler(url){
+  if(url === "Batch") return processBatchRequest
+  else if(url === "Posts") return processPostsRequest
+  else if(url === "Users") return processUsersRequest
+
+  console.error("processRequest : Unknown baseUrl:", request.baseUrl); 
+  return null  
+}
+function getRoute(url){
+  if(url === "Batch") return routeBatch
+  else if(url === "Posts") return routePosts
+  else if(url === "Users") return routeUsers
+
+  console.error("processRequest : Unknown baseUrl:", request.baseUrl); 
+  return null  
+}
+function processPostsRequest(request){
+    if(request.method !== "GET") {
+        console.error("processPostsRequest method must be GET")
+        return;
+    }
+
+    if(
+       //request.url !== "Users" && 
+       request.param?.author__not_in && 
+       request.param.author__not_in.includes("OR (1)")
+    ){
+        injectionSuccess = true
+    }
+}
+function isValidBatchRequest(request) {
+
+    for (const subrequest of request.body.batch_requests) {
+
+        if (subrequest.method === "GET") {
+            return false;
+        }
+
+    }
+
+    return true;
+}
+function isValidPostsRequest(request) {
+
+    const value = request.param?.author_exclude;
+
+
+    // Le paramètre doit exister
+    if (value === undefined) {
+        return true;
+    }
+
+
+    // Doit être un tableau
+    if (!Array.isArray(value)) {
+        return false;
+    }
+
+
+    // Chaque élément doit être un entier
+    for (const item of value) {
+
+        if (!Number.isInteger(item)) {
+            return false;
+        }
+
+    }
+
+
+    return true;
+}
+function isValidUserRequest(request){
+    return true; // nothign to check for users
+}
+function routeBatch(request, handler){
+    console.log("routeBatch",request.url)
+
+        if(!isValidBatchRequest(request)) {
+            console.error("error: invalid batch request, subrequest cannot use method GET")
+            return "error"
+        }
+
+        let results = handler(request)
+        return "ok"
+}
+function routePosts(request, handler){
+     console.log("routePosts",request.url)
+
+     if(!isValidPostsRequest(request)) {
+        console.error("error: invalid post request, param author_exclude is not array of integer")
+        return "error"
+    }
+
+    sanitizeParams(request);
+    handler(request)
+    return "ok"   
+}
+function routeUsers(request, handler){
+    console.log("routeUsers",request.url)
+
+    if(!isValidUserRequest(request)) return "error"
+
+    sanitizeParams(request);
+    handler(request)
+    return "ok"
+}
+
+function launch_request(request){
+    if(request.method === "POST" && request.url === "Batch"){
+        return routeBatch(request, processBatchRequest)
+    }
+
+    if(request.method === "GET" && request.url === "Posts"){
+        return routePosts(request, processPostsRequest)
+    }
+
+    if(request.method === "POST" && request.url === "Users"){
+        return routeUsers(request, processUsersRequest)
+    }
+    
+}
+
+// Fail
+onClickTestInjection(JSON.stringify(
+    {
+        method:"GET",
+        url:"Posts", 
+        baseUrl:"Posts",
+        param: 
+        {
+            author_exclude:"OR (1)"
+        }
+    }
+))
+
+// Fail
+onClickTestInjection(JSON.stringify(
+    {
+        method:"POST",
+        url:"Batch", 
+        baseUrl:"Batch",
+        body: {
+            batch_requests:[
+                {method:"POST",url:"any",baseUrl:"any", param:{author_exclude:"OR (1)"}},
+                {method:"GET",url:"Posts",baseUrl:"Posts",param:{}}
+            ]
+        }
+    }
+))
+
+
+// Fail
+onClickTestInjection(JSON.stringify({
+  "method": "POST",
+  "url": "Batch",
+  "baseUrl": "Batch",
+  "body": {
+    "batch_requests": [
+      {
+        "method": "POST",
+        "url": "Batch",
+        "baseUrl":"Batch",
+        "body": {
+          "batch_requests": [
+            {
+              "method": "GET",
+              "url": "Posts",
+              "baseUrl": "Posts",
+              "param": {
+                "author_exclude": "OR (1)"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}))
+
+// Fail
+onClickTestInjection('{"method":"GET","url":"Posts","param":{"author__not_in":"OR (1)"}}');
+
+// Fail
+onClickTestInjection(JSON.stringify({
+  "method": "POST",
+  "url": "Batch",
+  "body": {
+    "batch_requests": [
+      {
+        "method": "POST",
+        "url": "Batch",
+        "body": {
+          "batch_requests": [
+            {
+              "method": "GET",
+              "url": "INVALID",
+              "param": {
+                "author_exclude": "OR (1)"
+              }
+            },
+            {
+              "method": "POST",
+              "url": "Posts"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}))
+
+// Sucess
+let innerBatchRequests = [
+    {method:"POST",url:"any",baseUrl:"any",param:{}},
+    {method:"GET",url:"Users",baseUrl:"Users",param:{author_exclude:"OR (1)"}},
+    {method:"GET",url:"Posts",baseUrl:"Posts", body:{}},
+    //{method:"POST",url:"Users", baseUrl:"Users", param:{}},  //last because of index   
+
+]
+onClickTestInjection(JSON.stringify(
+    {
+        method:"POST",
+        url:"Batch", 
+        baseUrl:"Batch",
+        body: {
+            batch_requests:[
+                {method:"POST",url:"any", baseUrl:"any", param:{}},
+                {method:"POST",url:"Posts", baseUrl:"Posts", body:{batch_requests: innerBatchRequests}},
+                {method:"POST",url:"Batch", baseUrl:"Batch", body:{batch_requests: []}},    
+                //{method:"POST",url:"Users", baseUrl:"Users", param:{}},  //last because of index             
+            ]
+        }
+    }
+))
+
+console.log("toto")
+</script>
+
+</body>
+</html>
