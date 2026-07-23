@@ -182,18 +182,6 @@ Controller Execution
 Query Builder
 </div>
 
-
-
-<!--
-<h2>Execution Pipeline</h2>
-
-<div id="result"></div>
-
-
-</div>
--->
-
-
 <script>
 
 //// BUISNESS LOGIC ////
@@ -361,6 +349,7 @@ function routePosts(request, handler){
     handler(request)
     return "ok"   
 }
+
 function routeUsers(request, handler){
     console.log("routeUsers",request.url)
 
@@ -376,12 +365,12 @@ function routeUsers(request, handler){
 }
 
 function getRoute(url){
-  if(url === "Batch") return routeBatch
-  else if(url === "Posts") return routePosts
-  else if(url === "Users") return routeUsers
+    if(url === "Batch") return routeBatch
+    else if(url === "Posts") return routePosts
+    else if(url === "Users") return routeUsers
 
-  console.error("getRoute - unknown url:", request.url); 
-  return null  
+    console.error("getRoute - unknown url:", request.url); 
+    return null  
 }
 ////////
 
@@ -411,7 +400,6 @@ function isValidSchemaPostsRequest(request) {
 
     const value = request.param?.author_exclude;
 
-
     if (value === undefined) {
         return true;
     }
@@ -428,7 +416,6 @@ function isValidSchemaPostsRequest(request) {
         }
     }
 
-
     return true;
 }
 
@@ -437,7 +424,7 @@ function isValidSchemaUsersRequest(request){
         console.error("isValidSchemaUsersRequest - method must be GET or POST")
         return false;
     }
-    return true; // nothing to check for users
+    return true;
 }
 ////////
 
@@ -470,7 +457,7 @@ document.getElementById("labForm").addEventListener("submit", function(event) {
 });
 
 let injectionSuccess = false;
-function onClickTestInjection(requestStr){
+function onClickTestInjection(requestStr, deactivateAlertpopup){
 
     try {
         let request = JSON.parse(requestStr)
@@ -480,21 +467,32 @@ function onClickTestInjection(requestStr){
       console.error(e)
     }
 
+    let success = injectionSuccess;
+
     if(injectionSuccess){
         console.log("Congratulations! SQL injection succeeded!!!")
-        alert("Congratulations! SQL injection succeeded!!!");
+        if(!deactivateAlertpopup) alert("Congratulations! SQL injection succeeded!!!");
     } else {
-        console.log("injection fail!")
-        alert("fail!")
+        console.log("Injection fail!")
+        if(!deactivateAlertpopup) alert("Injection fail!")
     }
 
     // Reinit for next try
     injectionSuccess = false
 
+    return success;
 }
 
-/*
-onClickTestInjection(JSON.stringify({
+/////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
+
+//// ## UNIT TESTS
+
+let testrslt;
+
+// 1
+testrslt = onClickTestInjection(JSON.stringify({
   "method": "POST",
   "url": "Batch",
   "body": {
@@ -524,11 +522,13 @@ onClickTestInjection(JSON.stringify({
       }
     ]
   }
-}))
+}),true)
+if(testrslt) console.error("## UNIT TEST 1 fails");
+else console.log("## UNIT TEST 1 success");
 
 
-// Fail
-onClickTestInjection(JSON.stringify(
+// 2
+testrslt = onClickTestInjection(JSON.stringify(
     {
         method:"GET",
         url:"Posts", 
@@ -537,10 +537,12 @@ onClickTestInjection(JSON.stringify(
             author_exclude:"0) OR (1=1);"
         }
     }
-))
+),true)
+if(testrslt) console.error("## UNIT TEST 2 fails");
+else console.log("## UNIT TEST 2 success");
 
-// Fail
-onClickTestInjection(JSON.stringify(
+// 3
+testrslt = onClickTestInjection(JSON.stringify(
     {
         method:"POST",
         url:"Batch", 
@@ -551,11 +553,13 @@ onClickTestInjection(JSON.stringify(
             ]
         }
     }
-))
+),true)
+if(testrslt) console.error("## UNIT TEST 3 fails");
+else console.log("## UNIT TEST 3 success");
 
 
-// Fail
-onClickTestInjection(JSON.stringify({
+// 4
+testrslt = onClickTestInjection(JSON.stringify({
   "method": "POST",
   "url": "Batch",
   "body": {
@@ -577,13 +581,17 @@ onClickTestInjection(JSON.stringify({
       }
     ]
   }
-}))
+}),true)
+if(testrslt) console.error("## UNIT TEST 4 fails");
+else console.log("## UNIT TEST 4 success");
 
-// Fail
-onClickTestInjection('{"method":"GET","url":"Posts","param":{"author__not_in":"0) OR (1=1);"}}');
+// 5
+testrslt = onClickTestInjection('{"method":"GET","url":"Posts","param":{"author__not_in":"0) OR (1=1);"}}',true);
+if(testrslt) console.error("## UNIT TEST 5 fails");
+else console.log("## UNIT TEST 5 success");
 
-// Fail
-onClickTestInjection(JSON.stringify({
+// 6
+testrslt = onClickTestInjection(JSON.stringify({
   "method": "POST",
   "url": "Batch",
   "body": {
@@ -609,9 +617,12 @@ onClickTestInjection(JSON.stringify({
       }
     ]
   }
-}))
+}),true)
+if(testrslt) console.error("## UNIT TEST 6 fails");
+else console.log("## UNIT TEST 6 success");
 
-onClickTestInjection(JSON.stringify({
+// 7
+testrslt = onClickTestInjection(JSON.stringify({
   "method": "POST",
   "url": "Batch",
   "body": {
@@ -633,16 +644,18 @@ onClickTestInjection(JSON.stringify({
       }
     ]
   }
-}))
+}),true)
+if(testrslt) console.error("## UNIT TEST 7 fails");
+else console.log("## UNIT TEST 7 success");
 
-// Sucess
+// 8
 let innerBatchRequests = [
     {method:"POST",url:"any",param:{}},
     {method:"GET",url:"Users",param:{author_exclude:"0) OR (1=1);"}},
     {method:"GET",url:"Posts", body:{}},
 
 ]
-onClickTestInjection(JSON.stringify(
+testrslt = onClickTestInjection(JSON.stringify(
     {
         method:"POST",
         url:"Batch", 
@@ -656,7 +669,52 @@ onClickTestInjection(JSON.stringify(
             ]
         }
     }
-))*/
+),true)
+if(!testrslt) console.error("## UNIT TEST 8 fails");
+else console.log("## UNIT TEST 8 success");
+
+// 9
+testrslt = onClickTestInjection(JSON.stringify({
+  "url": "Batch",
+  "method": "POST",
+  "body": {
+    "batch_requests": [
+      {
+        "url": "InvalidUrl",
+        "method": "POST"
+      },
+      {
+        "url": "Users",
+        "method": "POST",
+        "body": {
+          "batch_requests": [
+            {
+              "url": "InvalidUrl",
+              "method": "POST"
+            },
+            {
+              "url": "Users",
+              "method": "GET",
+              "param": {
+                "author_exclude": "0) OR (1=1);"
+              }
+            },
+            {
+              "url": "Posts",
+              "method": "POST"
+            }
+          ]
+        }
+      },
+      {
+        "url": "Batch",
+        "method": "POST"
+      }
+    ]
+  }
+}),true)
+if(!testrslt) console.error("## UNIT TEST 9 fails");
+else console.log("## UNIT TEST 9 success");
 
 
 </script>
