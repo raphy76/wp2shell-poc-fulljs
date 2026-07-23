@@ -65,10 +65,15 @@ function processPostsRequest(request){
 
     if(request.method === "GET"){
         // SQL command based on request.param?.author__not_in
-        // `SELECT * FROM wp_posts WHERE post_status = 'publish' AND post_author NOT IN (${request.param?.author__not_in ?? "0"});`;
+        let sqlcmd = `SELECT * FROM wp_posts WHERE post_status = 'publish'`
+
+        if(request?.param?.author__not_in) 
+            sqlcmd += `AND post_author NOT IN (${request.param.author__not_in});`;
+
+        // sqlcmd.execute();
 
         // check injection 
-        if(request.param?.author__not_in?.includes("0) OR (1=1);")){
+        if(sqlcmd.includes("0) OR (1=1);")){
             injectionSuccess = true
         }    
 
@@ -96,12 +101,18 @@ function processUsersRequest(request){
 }
 
 // Common
-function sanitizeArrayAuthor(author_exclude){
+function sanitizeArrayAuthor(author_exclude) {
     let sanitizedArray = [];
-    for(let id of author_exclude){
-        sanitizedArray.push(Number(id))
+
+    for (let id of author_exclude) {
+        if (!Number.isInteger(Number(id))) {
+            continue;
+        }
+
+        sanitizedArray.push(Number(id));
     }
-    return sanitizedArray;
+
+    return sanitizedArray.join(",");
 }
 
 function sanitizeParams(request){
@@ -116,7 +127,12 @@ function sanitizeParams(request){
             
             if(Array.isArray(author_exclude)){
                 author_exclude = sanitizeArrayAuthor(author_exclude)
+            } 
+
+            if(typeof author_exclude !== "string"){
+                author_exclude = ""
             }
+
             let author__not_in = author_exclude
 
             // map author_exclude -> author__not_in
